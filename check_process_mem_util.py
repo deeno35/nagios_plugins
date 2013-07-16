@@ -44,7 +44,7 @@ def mb_to_kb(value):
 
 
 def usage():
-    print "usage: check_process_mem_util.py [-h] [-a] [-m] [-g]-c <int>",
+    print "usage: check_process_mem_util.py [-h] [-a] [-m] [-g] -c <int>",
     print "-w <int>"
     print "    Finds processes that are using more than W or C KB"
     print
