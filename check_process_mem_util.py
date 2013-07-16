@@ -49,7 +49,8 @@ def usage():
     print "    Finds processes that are using more than W or C KB"
     print
     print "optional arguments:"
-    print "-a    Calculate mem totals per application instead of per pid"
+    print "-a    Calculate mem totals per app instead of per pid (calc sum",
+    print "for sub procs)"
     print "-c <int>     Crit threshold in KB"
     print "-g GB thresholds instead of default (KB)"
     print "-h, --help  show this help message and exit"
