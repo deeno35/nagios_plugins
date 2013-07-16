@@ -14,7 +14,7 @@
 #        Aggregation is not 100% accurate due to the fact that threads share
 #        RSS mem pools.  Just bear this in mind
 #
-#        Tested on SL6 and Ubuntu
+#        Tested on SL6 and Ubuntu Server 12.04 LTS
 # Todo:
 #     GB <-- handle floating point, current GB compares are just to the
 #            nearest GB
