@@ -172,12 +172,12 @@ class Process:
             tmp_consumption = self.mem_consumption / 1024
         elif self.units == "GB":
             tmp_consumption = self.mem_consumption / 1024 / 1024
-        return_string = str(tmp_consumption) + " " + self.units + " "
-        return_string += self.name
+        return_string = self.units + ": " + str(tmp_consumption)
+        return_string += ", proc_name: " + self.name
         if self.pid >= 0:
-            return_string += " PID: " + str(self.pid)
+            return_string += ", PID: " + str(self.pid)
         if self.cwd:
-            return_string += " CWD: " + str(self.cwd)
+            return_string += ", CWD: " + str(self.cwd)
         return return_string
 
     def get_cwd(self):
