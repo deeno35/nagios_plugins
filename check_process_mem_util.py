@@ -44,17 +44,19 @@ def mb_to_kb(value):
 
 
 def usage():
-    print "usage: check_process_mem_util.py [-h] [-a] [-m] [-g] -c <int>",
-    print "-w <int>"
-    print "    Finds processes that are using more than W or C KB"
+    print "usage: check_process_mem_util.py [-h] [-a] [-m] [-g] [-b] [-r] ",
+    print "-w <int> -c <int>"
+    print "    Finds processes that have a mem footprint larger than W or C KB"
     print
     print "optional arguments:"
     print "-a    Calculate mem totals per app instead of per pid (calc sum",
     print "for sub procs)"
+    print "-b    brief output.  don't print headers (no output for OK states)"
     print "-c <int>     Crit threshold in KB"
-    print "-g GB thresholds instead of default (KB)"
+    print "-g     GB thresholds instead of default (KB)"
     print "-h, --help  show this help message and exit"
-    print "-m MB thresholds instead of default (KB)"
+    print "-m     MB thresholds instead of default (KB)"
+    print "-r     we can grab cwd for the process we have root privs"
     print "-w <int>     Crit threshold in KB"
     sys.exit(3)
 
@@ -64,11 +66,11 @@ def parse_args():
     Returns a dict of the args as it's easier to work with than a list of
     tuples
     """
-    return_dict = {"units" : "KB"}
+    return_dict = {"units" : "KB", "verbose" : True, "root" : False}
     units_set = False
     # Process the args and assign build the dict to return
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hac:gmw:", ["crit=","warn="])
+        opts, args = getopt.getopt(sys.argv[1:], "habc:gmrw:", ["crit=","warn="])
     except getopt.GetoptError:
         usage()
     for opt, arg in opts:
@@ -76,6 +78,8 @@ def parse_args():
             usage()
         elif opt in ("-a", "--app"):
             return_dict["app"] = True
+        elif opt in ("-b", "--brief"):
+            return_dict["verbose"] = False
         elif opt in ("-c", "--crit"):
             return_dict["crit"] = int(arg)
         elif opt in ("-g", "-G"):
@@ -92,6 +96,8 @@ def parse_args():
             else:
                 return_dict["units"] = "MB"
                 units_set = True
+        elif opt in ("-r", "--root"):
+            return_dict["root"] = True
         elif opt in ("-w", "--warn"):
             return_dict["warn"] = int(arg)
 
@@ -125,18 +131,25 @@ def get_all_pids():
 
 
 class Process:
-    "Track process info we care about - pid, name, mem consumption, etc"
+    """
+    Track process info we care about - pid, name, mem consumption, etc
+    NOTE: cdw requires root access so it is only tracked if -r is specified
+    """
     name = ""
-    pid = 0
+    cwd = ""
     mem_consumption = 0
+    pid = 0
     units = "KB"
 
-    def __init__(self, pid, units, name = "", mem_consumption = 0):
+    def __init__(self, pid, units, setcwd = False, name = "",
+                mem_consumption = 0):
         """
         name and mem_consumption can be passed in as values.  Otherwise,
         pull the values out of /proc based on the pid
         pids that are less than 1 are assumed to denote an aggregated
         mem total
+        setcwd is a boolean.  If it's passed in as True then we populate
+            self.cwd
         """
         self.pid = pid
         self.units = units
@@ -146,6 +159,8 @@ class Process:
         else:
             self.name = name
             self.mem_consumption = mem_consumption
+        if setcwd:
+            self.set_cwd()
 
     def __cmp__(self, other):
         return cmp(self.mem_consumption, other.mem_consumption)
@@ -161,13 +176,27 @@ class Process:
         return_string += self.name
         if self.pid >= 0:
             return_string += " PID: " + str(self.pid)
+        if self.cwd:
+            return_string += " CWD: " + str(self.cwd)
         return return_string
+
+    def get_cwd(self):
+        return self.cwd
 
     def get_mem_consumption(self):
         return self.mem_consumption
 
     def get_process_name(self):
         return self.name
+
+    def set_cwd(self):
+        """
+        Only do this if user specified -r
+        """
+        try:
+            self.cwd = os.readlink("/proc/" + self.pid + "/cwd")
+        except OSError, e:
+            self.cwd = e
 
     def set_mem_consumption(self):
         """
@@ -228,7 +257,7 @@ if __name__ == '__main__':
     # Walk the pids to pull mem consumption and proc names
     pids = get_all_pids()
     for pid in pids:
-        procs.append(Process(pid, args["units"]))
+        procs.append(Process(pid, args["units"], args["root"]))
 
     # Aggregate the mem consumption for procs with the same name
     # if user option is specified
@@ -242,7 +271,7 @@ if __name__ == '__main__':
         # pid = -1 because we just don't care once we've aggregated
         procs[:] = []
         for name, mem in aggregate_dict.items():
-            procs.append(Process(-1, args["units"], name, mem))
+            procs.append(Process(-1, args["units"], args["root"], name, mem))
 
     # Find offending procs and put them in the appropriate crit/warn bucket
     for proc in procs:
@@ -261,19 +290,23 @@ if __name__ == '__main__':
 
     # Print messages and return
     if crit_procs:
-        print "CRITIAL: Processes found that consume more mem than",
-        print str(args["crit"]) + " " + args["units"]
+        if args["verbose"]:
+            print "CRITIAL: Processes found that consume more mem than",
+            print str(args["crit"]) + " " + args["units"]
         for proc in sorted(crit_procs, reverse=True):
             print str(proc)
         sys.exit(2)
     elif warn_procs:
-        print "WARNING: Processes found that consume more mem than",
-        print str(args["warn"]) + " " + args["units"]
+        if args["verbose"]:
+            print "WARNING: Processes found that consume more mem than",
+            print str(args["warn"]) + " " + args["units"]
         for proc in sorted(warn_procs, reverse=True):
             print str(proc)
         sys.exit(1)
-    print "OK: All procs are consuming less than " + str(args["warn"]),
-    print args["units"] + " of mem"
+
+    if args["verbose"]:
+        print "OK: All procs are consuming less than " + str(args["warn"]),
+        print args["units"] + " of mem"
 
 
 
