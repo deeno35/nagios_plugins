@@ -177,7 +177,8 @@ class Process:
         if self.pid >= 0:
             return_string += ", PID=" + str(self.pid)
         if self.cwd:
-            return_string += ", CWD=" + str(self.cwd)
+            splunk_hack = re.sub(r"\/\d+$", "/...", self.cwd)
+            return_string += ", CWD=" + splunk_hack
         return return_string
 
     def get_cwd(self):
@@ -209,13 +210,20 @@ class Process:
             inFile = open("/proc/" + self.pid + "/status", "r")
         except IOError:
             self.mem_consumption = 0
+            return
         else:
-            for line in inFile:
-                m = re.match("(VmRSS:)\s+(\d+)", line)
-                if m:
-                    self.mem_consumption = int(m.group(2))
-                    return
+            #for line in inFile:
+                #m = re.match("(VmRSS:)\s+(\d+)", line)
+                #if m:
+                    #self.mem_consumption = int(m.group(2))
+                    #inFile.close()
+                    #return
+            #self.mem_consumption = 0
             self.mem_consumption = 0
+            for line in inFile:
+                if "VmRSS:" in line:
+                    self.mem_consumption = int(line.split()[1])
+                    break
             inFile.close()
 
     def set_process_name(self):
@@ -234,7 +242,8 @@ class Process:
                 m = re.match("(Name:)\s+(\S+)", line)
                 if m:
                     self.name = m.group(2)
-            inFile.close()
+                    break
+        inFile.close()
 
     def is_above_mem_threshold(self, value):
         if self.mem_consumption >= value:
@@ -307,7 +316,6 @@ if __name__ == '__main__':
     if args["verbose"]:
         print "OK: All procs are consuming less than " + str(args["warn"]),
         print args["units"] + " of mem"
-
 
 
 
