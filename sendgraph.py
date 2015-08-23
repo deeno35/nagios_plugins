@@ -3,6 +3,8 @@
 Adapted from: 
 https://gist.github.com/bkjones/1902478
 
+Send email notifications with context (graphite graph).
+
 This takes a recipient email address and a graphite URL and sends a 
 POST to <graphite host>/dashboard/email with a body that looks like
 this: 
@@ -72,6 +74,7 @@ date_time = os.getenv('ICINGA_LONGDATETIME', None)
 action_url = os.getenv('ICINGA_SERVICEACTIONURL', None)
 service_output = os.getenv('ICINGA_SERVICEOUTPUT', None)
 service_duration = os.getenv('ICINGA_SERVICEDURATION', None)
+notification_comment = os.getenv('ICINGA_NOTIFICATIONCOMMENT', None)
 
 def send_graph_email(graph, subject, sender, receivers, body=None):
     """
@@ -112,7 +115,7 @@ def send_graph_email(graph, subject, sender, receivers, body=None):
         s.sendmail(sender, receivers, msg.as_string())
         s.close()
     except Exception as out:
-        logging.error("Sending mail failed: %s" % out)
+        LOGGER.error("Sending mail failed: %s" % out)
 
 def get_highlight_color(notification_type, service_state):
     # default
@@ -145,6 +148,7 @@ def generate_email_body(bgcolor):
             "<TR><TD>Runbook:</TD><TD>"
             "<A HREF='{action_url}'>{action_url}</A></TD></TR>"
             "<TR><TD>Problem Duration:</TD><TD>{service_duration}</TD></TR>"
+            "<TR><TD>Comment:</TD><TD>{notification_comment}</TD></TR>"
             "<TR><TD></TD><TD></TD></TR>"
             "<TR><TD>Check Output:</TD><TD>{service_output}</TD></TR>"
             "</TABLE>".format(date_time=date_time, bgcolor=bgcolor,
@@ -153,6 +157,7 @@ def generate_email_body(bgcolor):
                 service_description=service_description,
                 host_alias=host_alias, host_address=host_address,
                 action_url=action_url, service_duration=service_duration,
+                notification_comment=notification_comment,
                 service_output=service_output))
     return body
 
@@ -177,10 +182,17 @@ def get_graph(options):
             graph_url += "&target=threshold({0}, 'crit = {0}','red')".format(
                 crit_threshold)
 
-        LOGGER.debug('graph url is %s' % graph_url)
-        result = requests.get(graph_url)
-        LOGGER.debug("Response headers for graph request: %s", result.headers)
-        graph = result.content
+        try:
+            LOGGER.debug('graph url is %s' % graph_url)
+            result = requests.get(graph_url, timeout=30)
+        except Exception, e:
+            LOGGER.error("Couldn't pull a graph from {0}".format(graph_url))
+            LOGGER.error(e)
+            graph = None
+        else:
+            LOGGER.debug(
+                "Response headers for graph request: %s", result.headers)
+            graph = result.content
     else:
         graph = None
 
@@ -221,10 +233,11 @@ def main():
     #     body += "<BR><BR>{0}: {1}<BR>".format(key, os.environ[key])
 
     subject = ("{notification_type} {service_state} "
-               "{host_alias}/{service_description}".format(
+               "{service_description}/{host_alias}".format(
                 notification_type=notification_type,
-                service_state=service_state, host_alias=host_alias,
-                service_description=service_description))
+                service_state=service_state,
+                service_description=service_description, host_alias=host_alias
+                ))
 
     graph = get_graph(options)
 
